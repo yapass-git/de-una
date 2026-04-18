@@ -35,6 +35,12 @@ export type MapSectionProps = {
    * the basemap. Typically fed by the `useGeolocation` hook.
    */
   userLocation?: { lat: number; lng: number } | null;
+  /**
+   * Path under `/public` to use as the user-location avatar. When set, the
+   * default teal pulse-dot is replaced by the image inside a circular badge
+   * (still wrapped by the soft pulse ring). Defaults to the YaPass mascot.
+   */
+  userAvatarSrc?: string;
 };
 
 /**
@@ -58,6 +64,7 @@ export function MapSection({
   height = 380,
   onSelectLocal,
   userLocation,
+  userAvatarSrc = "/assets/position.png",
 }: MapSectionProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(
@@ -172,10 +179,19 @@ export function MapSection({
             latitude={userLocation.lat}
             anchor="center"
           >
-            <div className="relative flex h-10 w-10 items-center justify-center">
-              <span className="absolute h-10 w-10 animate-ping rounded-full bg-teal/30" />
-              <span className="absolute h-5 w-5 rounded-full bg-teal/40" />
-              <span className="relative h-3.5 w-3.5 rounded-full bg-teal ring-[3px] ring-white shadow-[0_2px_6px_rgba(0,0,0,0.25)]" />
+            <div
+              className="relative flex h-12 w-12 items-center justify-center"
+              aria-label="Tu ubicación"
+            >
+              <span className="absolute h-12 w-12 animate-ping rounded-full bg-primary/25" />
+              <span
+                className="relative h-11 w-11 overflow-hidden rounded-full bg-white ring-[3px] ring-white shadow-[0_2px_8px_rgba(75,29,140,0.45)]"
+                style={{
+                  backgroundImage: `url('${userAvatarSrc}')`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }}
+              />
             </div>
           </Marker>
         ) : null}

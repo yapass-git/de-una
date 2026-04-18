@@ -65,10 +65,48 @@ export function ScratchCard({
   style,
 }: ScratchCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesCanvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
   const revealedRef = useRef(false);
   const [revealed, setRevealed] = useState(false);
+  const [scratching, setScratching] = useState(false);
+
+  // ── Particle system (foil "dust" that falls when you scratch) ──────────
+  type Particle = {
+    x: number;
+    y: number;
+    vx: number; // px / ms
+    vy: number; // px / ms
+    size: number;
+    color: string;
+    life: number; // ms remaining
+    maxLife: number;
+    rotation: number;
+    rotationSpeed: number; // rad / ms
+  };
+  const particlesRef = useRef<Particle[]>([]);
+  const rafRef = useRef<number | null>(null);
+  const lastFrameRef = useRef<number>(0);
+  const foilColorsRef = useRef<[string, string, string]>(foilColors);
+  foilColorsRef.current = foilColors;
+
+  // The furry-hand cursor PNG (`/assets/mano_raspadita_cursor.png`) is 415×400,
+  // which is far above the CSS `cursor:` size limit (~32px on Windows, 128px
+  // on most other platforms). Browsers silently fall back to the default
+  // cursor in that case, which is why the hand was "missing".
+  //
+  // We render the hand as a DOM element that follows the pointer instead, so
+  // its actual painted size is whatever we choose (HAND_SIZE) regardless of
+  // any browser cursor cap. The native cursor is hidden over the foil.
+  const HAND_SIZE = 110;
+  // Hotspot inside the PNG (golden coin, bottom-left) measured as a fraction
+  // of the image so the on-screen "scratch tip" sits exactly where the foil
+  // is being erased.
+  const HOTSPOT_X_FRAC = 60 / 415;
+  const HOTSPOT_Y_FRAC = 360 / 400;
+  const handRef = useRef<HTMLDivElement>(null);
+  const [handVisible, setHandVisible] = useState(false);
 
   // Paint the foil once on mount / when dimensions change.
   useEffect(() => {
@@ -122,6 +160,112 @@ export function ScratchCard({
     setRevealed(false);
   }, [width, height, hintText, foilColors, brushRadius]);
 
+  // Resize the particle overlay canvas in lockstep with the foil canvas.
+  useEffect(() => {
+    const canvas = particlesCanvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    const ctx = canvas.getContext("2d");
+    if (ctx) ctx.scale(dpr, dpr);
+  }, [width, height]);
+
+  // Tear down the RAF loop on unmount so we don't leak callbacks.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+      particlesRef.current = [];
+    };
+  }, []);
+
+  /** Run the particle physics + render loop until the array empties. */
+  const ensureParticleLoop = useCallback(() => {
+    if (rafRef.current != null) return;
+    lastFrameRef.current = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(48, now - lastFrameRef.current);
+      lastFrameRef.current = now;
+
+      const canvas = particlesCanvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (!canvas || !ctx) {
+        rafRef.current = null;
+        return;
+      }
+
+      ctx.clearRect(0, 0, width, height);
+
+      const gravity = 0.0022; // px/ms²
+      const drag = 0.0008; // air resistance on horizontal velocity
+      const particles = particlesRef.current;
+
+      for (let i = particles.length - 1; i >= 0; i -= 1) {
+        const p = particles[i];
+        p.life -= dt;
+        if (p.life <= 0 || p.y > height + 6) {
+          particles.splice(i, 1);
+          continue;
+        }
+        p.vy += gravity * dt;
+        p.vx *= Math.max(0, 1 - drag * dt);
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.rotation += p.rotationSpeed * dt;
+
+        const alpha = Math.max(0, Math.min(1, p.life / p.maxLife));
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        // Tiny rectangular fleck — looks more like foil shavings than circles
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+        ctx.restore();
+      }
+
+      if (particles.length === 0) {
+        rafRef.current = null;
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  }, [width, height]);
+
+  /** Spawn a small burst of foil flecks at (x, y). */
+  const spawnParticles = useCallback(
+    (x: number, y: number, count: number) => {
+      const palette = foilColorsRef.current;
+      const particles = particlesRef.current;
+      // Cap the live particle count so a long drag can't OOM the loop.
+      if (particles.length > 220) return;
+      for (let i = 0; i < count; i += 1) {
+        const speed = 0.04 + Math.random() * 0.1;
+        // Mostly downward (π/2) with ±40° spread
+        const angle = Math.PI / 2 + (Math.random() - 0.5) * 1.4;
+        const life = 550 + Math.random() * 650;
+        particles.push({
+          x: x + (Math.random() - 0.5) * brushRadius * 0.9,
+          y: y + (Math.random() - 0.5) * 4,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 0.04, // small initial upward "kick"
+          size: 1.4 + Math.random() * 2.6,
+          color: palette[Math.floor(Math.random() * palette.length)],
+          life,
+          maxLife: life,
+          rotation: Math.random() * Math.PI * 2,
+          rotationSpeed: (Math.random() - 0.5) * 0.012,
+        });
+      }
+      ensureParticleLoop();
+    },
+    [brushRadius, ensureParticleLoop],
+  );
+
   const getPoint = useCallback(
     (e: ReactPointerEvent<HTMLCanvasElement>) => {
       const canvas = canvasRef.current;
@@ -131,6 +275,15 @@ export function ScratchCard({
     },
     [],
   );
+
+  /** Translate the floating hand so the "tip" (golden coin) sits at (x, y). */
+  const positionHand = useCallback((x: number, y: number) => {
+    const el = handRef.current;
+    if (!el) return;
+    const tx = x - HAND_SIZE * HOTSPOT_X_FRAC;
+    const ty = y - HAND_SIZE * HOTSPOT_Y_FRAC;
+    el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+  }, [HOTSPOT_X_FRAC, HOTSPOT_Y_FRAC]);
 
   const drawLine = useCallback(
     (from: { x: number; y: number }, to: { x: number; y: number }) => {
@@ -182,11 +335,14 @@ export function ScratchCard({
   const handlePointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
     if (revealedRef.current) return;
     drawingRef.current = true;
+    setScratching(true);
     const p = getPoint(e);
     if (!p) return;
     lastPointRef.current = p;
-    // Paint a single dot so a simple tap also scratches
+    positionHand(p.x, p.y);
+    setHandVisible(true);
     drawLine(p, { x: p.x + 0.01, y: p.y + 0.01 });
+    spawnParticles(p.x, p.y, 5);
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch {
@@ -195,18 +351,42 @@ export function ScratchCard({
   };
 
   const handlePointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current || revealedRef.current) return;
+    if (revealedRef.current) return;
     const p = getPoint(e);
     if (!p) return;
+    positionHand(p.x, p.y);
+    setHandVisible(true);
+    if (!drawingRef.current) return;
     const last = lastPointRef.current ?? p;
     drawLine(last, p);
+    // Emit particles proportional to the stroke length so fast drags throw
+    // off more dust than slow ones (but capped to keep things tidy).
+    const dx = p.x - last.x;
+    const dy = p.y - last.y;
+    const dist = Math.hypot(dx, dy);
+    const count = Math.min(8, 1 + Math.floor(dist / 6));
+    spawnParticles(p.x, p.y, count);
     lastPointRef.current = p;
   };
 
+  const handlePointerEnter = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (revealedRef.current) return;
+    const p = getPoint(e);
+    if (!p) return;
+    positionHand(p.x, p.y);
+    setHandVisible(true);
+  };
+
   const endStroke = () => {
-    if (!drawingRef.current) return;
+    if (!drawingRef.current) {
+      setScratching(false);
+      setHandVisible(false);
+      return;
+    }
     drawingRef.current = false;
     lastPointRef.current = null;
+    setScratching(false);
+    setHandVisible(false);
     checkReveal();
   };
 
@@ -230,12 +410,44 @@ export function ScratchCard({
 
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 touch-none cursor-grab active:cursor-grabbing"
+        className="absolute inset-0 touch-none"
+        style={{ cursor: "none" }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
+        onPointerEnter={handlePointerEnter}
         onPointerUp={endStroke}
         onPointerLeave={endStroke}
         onPointerCancel={endStroke}
+        aria-hidden="true"
+      />
+
+      {/* Falling foil dust — sits on top so flecks are visible while scratching.
+          pointer-events: none so it never steals interaction from the foil. */}
+      <canvas
+        ref={particlesCanvasRef}
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+      />
+
+      {/* Custom "hand" cursor rendered as a DOM image. The native CSS cursor
+          can't be used here because the source PNG (415×400) exceeds every
+          browser's cursor size cap, so we follow the pointer manually. */}
+      <div
+        ref={handRef}
+        className={cn(
+          "pointer-events-none absolute left-0 top-0 transition-opacity duration-100 ease-out will-change-transform",
+          handVisible && !revealed ? "opacity-100" : "opacity-0",
+          scratching ? "scale-[0.96]" : "",
+        )}
+        style={{
+          width: HAND_SIZE,
+          height: HAND_SIZE,
+          backgroundImage: "url('/assets/mano_raspadita_cursor.png')",
+          backgroundSize: "contain",
+          backgroundRepeat: "no-repeat",
+          backgroundPosition: "center",
+          filter: "drop-shadow(0 6px 8px rgba(75,29,140,0.25))",
+        }}
         aria-hidden="true"
       />
     </div>

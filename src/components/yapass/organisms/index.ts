@@ -12,6 +12,9 @@ export type { CampaignAlertModalProps } from "./CampaignAlertModal";
 export { CampaignAlerts } from "./CampaignAlerts";
 export type { CampaignAlertsProps } from "./CampaignAlerts";
 
+export { DesafioModal } from "./DesafioModal";
+export type { DesafioModalProps, DesafioStep } from "./DesafioModal";
+
 export { MapModal } from "./MapModal";
 export type { MapModalProps } from "./MapModal";
 

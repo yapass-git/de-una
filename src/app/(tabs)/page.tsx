@@ -1,8 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import {
+  IoArrowBack,
   IoArrowDownCircleOutline,
   IoBusinessOutline,
   IoCashOutline,
@@ -17,33 +18,167 @@ import {
 
 import {
   ActionGrid,
+  AdBanner,
   BalanceCard,
   Button,
   Card,
   ChallengeCard,
+  DesafioModal,
+  IconButton,
   LevelsCarousel,
+  MapSection,
+  Mascot,
+  MissionRow,
+  MissionsCard,
   PopupModal,
   RaspaYGanaModal,
   ScanButton,
   ScreenHeader,
   WelcomeAdPopup,
 } from "@/components/yapass";
-import type { ActionTileProps, Level } from "@/components/yapass";
+import type {
+  ActionTileProps,
+  DesafioModalProps,
+  Level,
+  MapLocal,
+} from "@/components/yapass";
+import { useGeolocation } from "@/hooks/use-geolocation";
 import { useOnceFlag } from "@/hooks/use-once-flag";
 
 /**
- * Home screen — matches the Figma "Home" frame (balance card,
- * YaPass levels, action grid, scan CTA).
- *
- * On the user's very first session the "ad" frame is shown as a
- * welcome popup (persisted via localStorage so it only appears once).
- * The bell icon reopens the "pop up" frame (new daily challenge).
+ * Locales reales del barrio (coordenadas exactas suministradas por el equipo).
+ * El centro de fallback es el promedio de las tres tiendas, así el mapa se
+ * abre encuadrando todas aunque el GPS aún no haya respondido.
  */
-export default function HomeScreen() {
+const LOCALES: MapLocal[] = [
+  {
+    id: "1",
+    title: "Víveres Merceditas",
+    desc: "Abarrotes y víveres del barrio",
+    lat: -0.198474,
+    lng: -78.436024,
+  },
+  {
+    id: "2",
+    title: "Frutería Danny",
+    desc: "Frutas y verduras frescas",
+    lat: -0.198698,
+    lng: -78.435455,
+  },
+  {
+    id: "3",
+    title: "Quantum",
+    desc: "Tienda de tecnología y accesorios",
+    lat: -0.198349,
+    lng: -78.435856,
+  },
+];
+
+const FALLBACK_CENTER = {
+  lat: (LOCALES[0].lat + LOCALES[1].lat + LOCALES[2].lat) / 3,
+  lng: (LOCALES[0].lng + LOCALES[1].lng + LOCALES[2].lng) / 3,
+};
+
+/**
+ * "Desafío Uno / Dos / Tres" detail content — mirrors the Figma frames
+ * (211:220, 211:222, 211:225). Keys match the discriminator stored in
+ * `activeDesafio` state below.
+ */
+type DesafioId = "uno" | "dos" | "tres";
+
+const DESAFIOS: Record<
+  DesafioId,
+  Omit<DesafioModalProps, "visible" | "onClose">
+> = {
+  uno: {
+    heroSrc: "/assets/missions/desafio-uno.png",
+    category: "Desafío de Compras",
+    title: "3 Locales Diferentes",
+    description:
+      "Realiza compras en tres marcas o locales participantes distintos.",
+    validity: "Del 1 al 31 de mayo de 2026.",
+    steps: [
+      "Compra en un comercio participante.",
+      "Repite en dos comercios participantes más, que sean diferentes.",
+      "Tu progreso se actualizará.",
+    ],
+  },
+  dos: {
+    heroSrc: "/assets/missions/desafio-dos.png",
+    category: "Apoyo Local",
+    title: "$10 en tu Barrio",
+    description:
+      "Acumula un total de $10 en compras en comercios de tu zona.",
+    validity: "Del 1 al 31 de mayo de 2026.",
+    steps: [
+      "Compra en cualquier tienda de barrio registrada cerca de ti.",
+      "Repite tus compras hasta alcanzar un total de $10.",
+      "Tu progreso se actualizará.",
+    ],
+  },
+  tres: {
+    heroSrc: "/assets/missions/desafio-tres.png",
+    category: "Cliente Frecuente",
+    title: "Compra Más de Dos Veces",
+    description:
+      "Realiza compras separadas en el mismo comercio participante.",
+    validity: "Del 1 al 31 de mayo de 2026.",
+    steps: [
+      "Realiza una compra en tu tienda favorita participante.",
+      "Repite la compra dos veces más en la misma tienda.",
+      "Tu recompensa se emitirá automáticamente.",
+    ],
+  },
+};
+
+/**
+ * Home screen — matches the Figma "Home" frame (balance card, YaPass levels,
+ * action grid, scan CTA).
+ *
+ * Tapping "Ver Misiones" no longer navigates away: the YaPass card expands
+ * in place and the rest of the screen is swapped for the YAPASS 1 + YAPASS 2
+ * frames (AdBanner, LevelsCarousel, ChallengeCard, "Ver Locales"). The
+ * Beneficios tab itself is locked at the navigation level.
+ */
+function HomeScreenInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showWelcome, markWelcomeSeen] = useOnceFlag("yapass.welcome.seen");
   const [showChallenge, setShowChallenge] = useState(false);
   const [showRaspa, setShowRaspa] = useState(false);
+  const [activeDesafio, setActiveDesafio] = useState<DesafioId | null>(null);
+
+  // Drives the in-place "Ver Misiones" expansion. Initialised from the URL
+  // so deep links (and the /beneficios redirect) land on the right view.
+  const [showMisiones, setShowMisiones] = useState(false);
+  // Drives the in-place "Ver Locales" pestaña. Mutually exclusive with the
+  // misiones view — opening one closes the other so the back button always
+  // returns to the default Home layout.
+  const [showLocales, setShowLocales] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("misiones") === "1") {
+      setShowMisiones(true);
+      router.replace("/");
+    }
+  }, [searchParams, router]);
+
+  const openMisiones = () => {
+    setShowLocales(false);
+    setShowMisiones(true);
+  };
+  const closeMisiones = () => setShowMisiones(false);
+
+  const openLocales = () => {
+    setShowMisiones(false);
+    setShowLocales(true);
+  };
+  const closeLocales = () => setShowLocales(false);
+
+  // Geolocation only fires while the locales pestaña is open, so we never
+  // ask for the prompt in the background just for visiting Inicio.
+  const geo = useGeolocation({ enabled: showLocales, watch: showLocales });
+  const mapCenter = geo.position ?? FALLBACK_CENTER;
 
   const actions: ActionTileProps[] = [
     { icon: IoSwapHorizontalOutline, label: "Transferir" },
@@ -78,46 +213,213 @@ export default function HomeScreen() {
       <ScreenHeader
         name="Samira"
         initials="SA"
+        location={showMisiones || showLocales ? "Barrio San Juan" : undefined}
         onBellPress={() => setShowChallenge(true)}
         onHelpPress={() => {}}
       />
 
-      <div className="flex flex-col gap-4 px-4 pt-3 pb-8">
-        <BalanceCard
-          amount={0.02}
-          spentLast30Days={2.25}
-          onPressRecharge={() => {}}
-          onPressDetail={() => {}}
-        />
+      {showLocales ? (
+        // ── Locales en tu barrio (in-place pestaña) ────────────────────────
+        // Triggered from "Ver Locales" / "Ver Ubicación". Replaces every
+        // other Home tile with the live map + the user mascot marker.
+        <div
+          key="locales"
+          className="flex flex-col gap-3 px-4 pt-3 pb-32 animate-[yp-expand-in_320ms_ease-out]"
+        >
+          <div className="flex items-center gap-2">
+            <IconButton
+              aria-label="Volver al inicio"
+              onClick={closeLocales}
+              size="sm"
+              icon={<IoArrowBack className="h-5 w-5 text-ink" />}
+            />
+            <span className="text-sm font-semibold text-text-secondary">
+              Locales cerca de ti
+            </span>
+          </div>
 
-        <Card variant="elevated" padding="lg" className="flex flex-col gap-3">
+          <Card variant="elevated" padding="lg" className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <span className="text-title-sm text-primary">
+                  Tiendas participantes
+                </span>
+                <span className="text-[12px] font-medium text-text-secondary">
+                  {geo.status === "loading"
+                    ? "Obteniendo tu ubicación…"
+                    : geo.status === "granted" && geo.accuracy != null
+                      ? `Ubicación activa · ±${Math.round(geo.accuracy)} m`
+                      : geo.status === "granted"
+                        ? "Ubicación activa"
+                        : geo.status === "denied"
+                          ? "Permiso denegado · centrado en el barrio"
+                          : "Centrado en el barrio"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={geo.refresh}
+                disabled={geo.status === "loading"}
+                className="text-[12px] font-semibold text-primary underline underline-offset-2 disabled:opacity-50"
+              >
+                Actualizar
+              </button>
+            </div>
+
+            <MapSection
+              center={mapCenter}
+              locales={LOCALES}
+              userLocation={geo.position ?? FALLBACK_CENTER}
+              userAvatarSrc="/assets/position.png"
+              height={420}
+              zoom={17}
+              onSelectLocal={() => {}}
+            />
+
+            <ul className="flex flex-col divide-y divide-line/70">
+              {LOCALES.map((local) => (
+                <li
+                  key={local.id}
+                  className="flex items-center gap-3 py-2.5"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
+                    <IoStorefrontOutline className="h-5 w-5" />
+                  </span>
+                  <div className="flex flex-1 flex-col">
+                    <span className="text-[14px] font-semibold leading-5 text-ink">
+                      {local.title}
+                    </span>
+                    <span className="text-[12px] leading-4 text-text-secondary">
+                      {local.desc}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      ) : showMisiones ? (
+        // ── YAPASS 1 + YAPASS 2 in-place view ──────────────────────────────
+        // Triggered from the Home "Ver Misiones" button. Animates in from
+        // the YaPass card slot, replacing every other Home tile.
+        <div
+          key="misiones"
+          className="flex flex-col gap-4 px-4 pt-3 pb-32 animate-[yp-expand-in_320ms_ease-out]"
+        >
+          <div className="flex items-center gap-2">
+            <IconButton
+              aria-label="Volver al inicio"
+              onClick={closeMisiones}
+              size="sm"
+              icon={<IoArrowBack className="h-5 w-5 text-ink" />}
+            />
+            <span className="text-sm font-semibold text-text-secondary">
+              Misiones YaPass
+            </span>
+          </div>
+
+          {/* YAPASS 1 — promo banner with mascot + CTA */}
+          <AdBanner
+            title="YaPass,"
+            description={"gana recompensas\ncomprando en tu barrio."}
+            ctaLabel="Ver beneficios"
+            onPressCta={() => {}}
+            mascot={<Mascot size={110} />}
+          />
+
+          {/* YAPASS 2 — levels carousel + weekly + daily missions */}
           <LevelsCarousel
             title="YaPass"
             levels={levels}
             currentLabel="Nivel 2"
             progress={0.55}
           />
-          <Button
-            label="Ver Misiones"
-            variant="primary"
-            size="md"
-            onClick={() => router.push("/beneficios")}
-            fullWidth={false}
-            className="self-center"
+
+          <MissionsCard title="Desafíos Semanales">
+            <MissionRow
+              iconSrc="/assets/missions/icon-tienda.png"
+              description="Compra en 3 locales diferentes"
+              progress={2}
+              total={3}
+              progressLabel="2/3"
+              unit="locales"
+              onMoreInfo={() => setActiveDesafio("uno")}
+            />
+            <MissionRow
+              iconSrc="/assets/missions/icon-factura.png"
+              description="Compra $10 en tu barrio"
+              progress={4}
+              total={10}
+              progressLabel="$4/$10"
+              onMoreInfo={() => setActiveDesafio("dos")}
+            />
+            <MissionRow
+              iconSrc="/assets/missions/icon-banderas.png"
+              description="5 clientes distintos realicen una compra"
+              progress={5}
+              total={5}
+              progressLabel="5/5"
+              onMoreInfo={() => setActiveDesafio("tres")}
+            />
+          </MissionsCard>
+
+          <MissionsCard title="Desafíos Diarios">
+            <MissionRow
+              iconSrc="/assets/missions/icon-hamburguesa.png"
+              description="50% de Cashback en PoliBurguers"
+              progress={0}
+              total={1}
+              progressLabel="0/1"
+              customLink={{
+                label: "Ver Ubicación",
+                onPress: openLocales,
+              }}
+            />
+          </MissionsCard>
+
+          <div className="pt-2">
+            <Button label="Ver Locales" size="lg" onClick={openLocales} />
+          </div>
+        </div>
+      ) : (
+        // ── Default Home layout ────────────────────────────────────────────
+        <div className="flex flex-col gap-4 px-4 pt-3 pb-8">
+          <BalanceCard
+            amount={0.02}
+            spentLast30Days={2.25}
+            onPressRecharge={() => {}}
+            onPressDetail={() => {}}
           />
-        </Card>
 
-        <ActionGrid items={actions} />
+          <Card variant="elevated" padding="lg" className="flex flex-col gap-3">
+            <LevelsCarousel
+              title="YaPass"
+              levels={levels}
+              currentLabel="Nivel 2"
+              progress={0.55}
+            />
+            <Button
+              label="Ver Misiones"
+              variant="primary"
+              size="md"
+              onClick={openMisiones}
+              fullWidth={false}
+              className="self-center"
+            />
+          </Card>
 
-        <ScanButton onPress={() => {}} />
-      </div>
+          <ActionGrid items={actions} />
+
+          <ScanButton onPress={() => {}} />
+        </div>
+      )}
 
       <WelcomeAdPopup
         visible={showWelcome === true}
         onClose={() => markWelcomeSeen()}
         onCta={() => {
           markWelcomeSeen();
-          router.push("/beneficios");
+          openMisiones();
         }}
       />
 
@@ -127,6 +429,12 @@ export default function HomeScreen() {
         sponsor={{ name: "Netlife" }}
         prize={{ amount: "$1.50", label: "Cashback Netlife", emoji: "🎉" }}
         onClaim={() => {}}
+      />
+
+      <DesafioModal
+        visible={activeDesafio !== null}
+        onClose={() => setActiveDesafio(null)}
+        {...(activeDesafio ? DESAFIOS[activeDesafio] : DESAFIOS.uno)}
       />
 
       <PopupModal
@@ -147,12 +455,21 @@ export default function HomeScreen() {
             label="Nuevo Desafío!"
             onClick={() => {
               setShowChallenge(false);
-              router.push("/beneficios");
+              openMisiones();
             }}
             size="lg"
           />
         </div>
       </PopupModal>
     </div>
+  );
+}
+
+export default function HomeScreen() {
+  // useSearchParams must live inside a Suspense boundary in the App Router.
+  return (
+    <Suspense fallback={null}>
+      <HomeScreenInner />
+    </Suspense>
   );
 }

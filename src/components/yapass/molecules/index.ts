@@ -12,6 +12,12 @@ export type { CardProps } from "./Card";
 export { ChallengeCard } from "./ChallengeCard";
 export type { ChallengeCardProps } from "./ChallengeCard";
 
+export { MissionRow } from "./MissionRow";
+export type { MissionRowProps } from "./MissionRow";
+
+export { MissionsCard } from "./MissionsCard";
+export type { MissionsCardProps } from "./MissionsCard";
+
 export { ScanButton } from "./ScanButton";
 export type { ScanButtonProps } from "./ScanButton";
 
