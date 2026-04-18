@@ -13,7 +13,8 @@ export type CampaignType =
   | "vuelve-veci"
   | "refiera-una-vez"
   | "compre-3-veces"
-  | "apure-veci";
+  | "apure-veci"
+  | "descuento-al-total";
 
 export type Business = {
   id: string;

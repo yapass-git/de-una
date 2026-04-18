@@ -2,6 +2,7 @@
 
 import { useCampaignStream } from "@/hooks/use-campaign-stream";
 import { useEffectiveLocation } from "@/hooks/use-effective-location";
+import { DEFAULT_RADIUS_M } from "@/lib/api";
 import type { Location } from "@/lib/api-types";
 import { LiveDot, type LiveDotState } from "../atoms/LiveDot";
 import { CampaignAlertModal } from "./CampaignAlertModal";
@@ -34,7 +35,7 @@ export type CampaignAlertsProps = {
  */
 export function CampaignAlerts({
   fallback = FALLBACK_LOCATION,
-  radiusM = 800,
+  radiusM = DEFAULT_RADIUS_M,
   showLiveIndicator = true,
 }: CampaignAlertsProps = {}) {
   const effective = useEffectiveLocation(fallback, { enabled: true });
