@@ -160,26 +160,32 @@ export function useCampaignStream({
         }
       });
 
-    const es = new EventSource(buildStreamUrl(current, radiusM));
+    const streamUrl = buildStreamUrl(current, radiusM);
+    console.debug("[yapass:sse] opening", streamUrl);
+    const es = new EventSource(streamUrl);
     esRef.current = es;
 
-    es.addEventListener("hello", () => {
-      if (!cancelled) dispatch({ type: "connect" });
+    es.addEventListener("hello", (event) => {
+      if (cancelled) return;
+      console.debug("[yapass:sse] hello", (event as MessageEvent).data);
+      dispatch({ type: "connect" });
     });
 
     es.addEventListener("campaign", (event) => {
       if (cancelled) return;
       try {
         const data = JSON.parse((event as MessageEvent).data) as Campaign;
+        console.debug("[yapass:sse] campaign", data.id, data.title);
         dispatch({ type: "append", campaign: data });
-      } catch {
-        // Bad frame — not fatal. Let the connection keep running.
+      } catch (err) {
+        console.warn("[yapass:sse] bad frame", err);
       }
     });
 
-    es.onerror = () => {
+    es.onerror = (event) => {
       // EventSource reconnects automatically; we just surface the blip
       // in state so the UI can show a connecting indicator.
+      console.warn("[yapass:sse] error / reconnecting", event);
       if (!cancelled) dispatch({ type: "disconnect" });
     };
 

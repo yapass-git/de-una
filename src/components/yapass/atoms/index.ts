@@ -24,6 +24,9 @@ export type { IconButtonProps, IconButtonSize, IconButtonVariant } from "./IconB
 export { Input } from "./Input";
 export type { InputProps } from "./Input";
 
+export { LiveDot } from "./LiveDot";
+export type { LiveDotProps, LiveDotState } from "./LiveDot";
+
 export { Mascot } from "./Mascot";
 export type { MascotProps } from "./Mascot";
 

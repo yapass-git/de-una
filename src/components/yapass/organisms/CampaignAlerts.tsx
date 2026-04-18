@@ -3,6 +3,7 @@
 import { useCampaignStream } from "@/hooks/use-campaign-stream";
 import { useEffectiveLocation } from "@/hooks/use-effective-location";
 import type { Location } from "@/lib/api-types";
+import { LiveDot, type LiveDotState } from "../atoms/LiveDot";
 import { CampaignAlertModal } from "./CampaignAlertModal";
 
 /**
@@ -18,6 +19,9 @@ export type CampaignAlertsProps = {
   fallback?: Location;
   /** Broadcast radius filter used on both /nearby and /stream. */
   radiusM?: number;
+  /** Show a small live-connection pill in the corner. Handy during
+   *  demos and while debugging whether SSE is actually connected. */
+  showLiveIndicator?: boolean;
 };
 
 /**
@@ -31,6 +35,7 @@ export type CampaignAlertsProps = {
 export function CampaignAlerts({
   fallback = FALLBACK_LOCATION,
   radiusM = 800,
+  showLiveIndicator = true,
 }: CampaignAlertsProps = {}) {
   const effective = useEffectiveLocation(fallback, { enabled: true });
   const stream = useCampaignStream({
@@ -39,13 +44,26 @@ export function CampaignAlerts({
     radiusM,
   });
 
+  const dotState: LiveDotState = stream.connected
+    ? "live"
+    : stream.error
+      ? "offline"
+      : "connecting";
+
   return (
-    <CampaignAlertModal
-      visible={stream.latest != null}
-      campaign={stream.latest}
-      onDismiss={() => {
-        if (stream.latest) stream.dismiss(stream.latest.id);
-      }}
-    />
+    <>
+      <CampaignAlertModal
+        visible={stream.latest != null}
+        campaign={stream.latest}
+        onDismiss={() => {
+          if (stream.latest) stream.dismiss(stream.latest.id);
+        }}
+      />
+      {showLiveIndicator ? (
+        <div className="pointer-events-none fixed left-1/2 top-[max(env(safe-area-inset-top),0.5rem)] z-40 -translate-x-1/2">
+          <LiveDot state={dotState} />
+        </div>
+      ) : null}
+    </>
   );
 }
