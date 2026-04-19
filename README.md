@@ -52,18 +52,18 @@ src/app/icon.png            # Favicon (auto-detectado por Next.js)
 
 ## Mapeos clave de la migración
 
-| Expo / RN                             | Next.js / Web                          |
-| ------------------------------------- | -------------------------------------- |
-| `expo-router` `<Stack>` + `<Tabs>`    | `src/app/(tabs)/layout.tsx` con tabs   |
-| `useRouter()` de `expo-router`        | `useRouter()` de `next/navigation`     |
-| `View`, `Text`, `Pressable`           | `div`, `span`, `button`                |
-| `StyleSheet.create`                   | Clases Tailwind + CSS variables        |
-| `@expo/vector-icons` (Ionicons)       | `react-icons/io5` (mismos Ionicons)    |
-| `@react-native-async-storage/...`     | `window.localStorage` (dentro del hook)|
-| `react-native-webview` (MapLibre)     | `react-map-gl` + `maplibre-gl` (nativo)|
-| `SafeAreaView`                        | `env(safe-area-inset-*)` en padding    |
-| `Modal` (RN)                          | Portal-less modal con overlay fijo     |
-| `expo-image` `<Image>`                | `next/image`                           |
+| Expo / RN                          | Next.js / Web                           |
+| ---------------------------------- | --------------------------------------- |
+| `expo-router` `<Stack>` + `<Tabs>` | `src/app/(tabs)/layout.tsx` con tabs    |
+| `useRouter()` de `expo-router`     | `useRouter()` de `next/navigation`      |
+| `View`, `Text`, `Pressable`        | `div`, `span`, `button`                 |
+| `StyleSheet.create`                | Clases Tailwind + CSS variables         |
+| `@expo/vector-icons` (Ionicons)    | `react-icons/io5` (mismos Ionicons)     |
+| `@react-native-async-storage/...`  | `window.localStorage` (dentro del hook) |
+| `react-native-webview` (MapLibre)  | `react-map-gl` + `maplibre-gl` (nativo) |
+| `SafeAreaView`                     | `env(safe-area-inset-*)` en padding     |
+| `Modal` (RN)                       | Portal-less modal con overlay fijo      |
+| `expo-image` `<Image>`             | `next/image`                            |
 
 ## Design system
 
@@ -99,3 +99,5 @@ para usos runtime (p. ej. construir el HTML embebido del mapa de MapLibre).
   para respetar el home indicator en iOS.
 - `WelcomeAdPopup` sólo se muestra en la primera visita del navegador,
   persistido en `localStorage` bajo la clave `yapass.welcome.seen`.
+
+ESTE ES EL WIN COMMMMMMITT AAAAAAAAAAAAAAAAAAAAA
