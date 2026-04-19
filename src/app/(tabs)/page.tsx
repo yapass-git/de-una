@@ -42,6 +42,7 @@ import type {
   Level,
   MapLocal,
 } from "@/components/yapass";
+import { useClaimedCampaigns } from "@/hooks/use-claimed-campaigns";
 import { useGeolocation } from "@/hooks/use-geolocation";
 import { useOnceFlag } from "@/hooks/use-once-flag";
 import { cn } from "@/lib/cn";
@@ -164,6 +165,12 @@ function HomeScreenInner() {
   // Like the other pestañas, it lives inside Inicio and is mutually
   // exclusive with showMisiones / showLocales.
   const [showRaspa, setShowRaspa] = useState(false);
+
+  // Daily missions the user spawned by tapping "Quiero mi X% OFF" in
+  // the campaign popup. Persisted in localStorage so they survive a
+  // reload — every entry renders an extra MissionRow inside
+  // "Desafíos Diarios" below.
+  const { claimed: claimedCampaigns } = useClaimedCampaigns();
 
   useEffect(() => {
     if (searchParams.get("misiones") === "1") {
@@ -445,6 +452,30 @@ function HomeScreenInner() {
           </MissionsCard>
 
           <MissionsCard title="Desafíos Diarios">
+            {/* User-spawned dailies: each campaign the user accepted from
+                the live popup becomes its own row, newest on top. */}
+            {claimedCampaigns.map((c) => {
+              const matchedLocal = LOCALES.find(
+                (l) =>
+                  l.title.toLowerCase() === c.businessName.toLowerCase(),
+              );
+              return (
+                <MissionRow
+                  key={c.id}
+                  iconSrc="/assets/missions/icon-tienda.png"
+                  description={`${c.discountPct}% de Cashback en ${c.businessName}`}
+                  progress={0}
+                  total={1}
+                  progressLabel="0/1"
+                  customLink={{
+                    label: "Ver Ubicación",
+                    onPress: () => openLocales(matchedLocal?.id ?? null),
+                  }}
+                />
+              );
+            })}
+
+            {/* Seed daily — kept so the section never reads empty. */}
             <MissionRow
               iconSrc="/assets/missions/icon-tienda.png"
               description="20% de Cashback en Frutería Danny"

@@ -1,6 +1,9 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useCampaignStream } from "@/hooks/use-campaign-stream";
+import { useClaimedCampaigns } from "@/hooks/use-claimed-campaigns";
 import { useEffectiveLocation } from "@/hooks/use-effective-location";
 import { DEFAULT_RADIUS_M } from "@/lib/api";
 import type { Location } from "@/lib/api-types";
@@ -45,6 +48,8 @@ export function CampaignAlerts({
     location: effective.location,
     radiusM,
   });
+  const { addClaim } = useClaimedCampaigns();
+  const router = useRouter();
 
   const dotState: LiveDotState = stream.connected
     ? "live"
@@ -59,6 +64,16 @@ export function CampaignAlerts({
         campaign={stream.latest}
         onDismiss={() => {
           if (stream.latest) stream.dismiss(stream.latest.id);
+        }}
+        onAccept={(campaign) => {
+          // 1) Persist the claim so the misiones view can render it
+          //    as a brand-new "Desafío Diario" row.
+          addClaim(campaign);
+          // 2) Jump straight to the YAPASS 1 / YAPASS 2 frame so the
+          //    user sees the freshly-spawned mission. The query param
+          //    is consumed by `(tabs)/page.tsx`, which flips
+          //    showMisiones=true and then strips the param.
+          router.push("/?misiones=1");
         }}
       />
       {showLiveIndicator ? (
